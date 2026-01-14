@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { doc, setDoc, onSnapshot, updateDoc, collection, addDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, setDoc, onSnapshot, updateDoc, collection, addDoc, serverTimestamp, query, orderBy, limit, deleteDoc } from 'firebase/firestore';
 import { db, auth } from '../firebase';
 import { UserCard } from './Card';
 import Card from './Card';
-import EmojiReaction from './EmojiReaction';
+import EmojiReactionMenu from './EmojiReaction';
 import { RotateCcw, Copy, Check, ArrowLeft, TrendingUp } from 'lucide-react';
+import { AnimatePresence } from 'framer-motion';
 
 const FIBONACCI = [0, 1, 2, 3, 5, 8, 13, 21, 34, 55, 89, '?'];
 
@@ -17,6 +18,12 @@ export default function PokerTable({ userName }) {
   const [users, setUsers] = useState({});
   const [copied, setCopied] = useState(false);
   const [average, setAverage] = useState(null);
+  
+  // Estados para reacciones dirigidas
+  const [showReactionMenu, setShowReactionMenu] = useState(false);
+  const [targetUser, setTargetUser] = useState(null);
+  const [menuPosition, setMenuPosition] = useState({ x: '50%', y: '50%' });
+  const [userReactions, setUserReactions] = useState({});
 
   useEffect(() => {
     if (!userName) {
@@ -53,9 +60,45 @@ export default function PokerTable({ userName }) {
       setUsers(usersData);
     });
 
+    // Escuchar reacciones dirigidas
+    const reactionsRef = collection(db, 'rooms', roomId, 'reactions');
+    const reactionsQuery = query(reactionsRef, orderBy('timestamp', 'desc'), limit(50));
+    const unsubscribeReactions = onSnapshot(reactionsQuery, (snapshot) => {
+      const reactions = {};
+      
+      snapshot.forEach((doc) => {
+        const data = doc.data();
+        const targetUserId = data.targetUserId;
+        
+        if (!reactions[targetUserId]) {
+          reactions[targetUserId] = [];
+        }
+        
+        reactions[targetUserId].push({
+          id: doc.id,
+          ...data,
+        });
+      });
+      
+      setUserReactions(reactions);
+      
+      // Limpiar reacciones antiguas después de 3 segundos
+      snapshot.forEach((doc) => {
+        const data = doc.data();
+        if (data.timestamp) {
+          const reactionTime = data.timestamp.toMillis();
+          const now = Date.now();
+          if (now - reactionTime > 3000) {
+            deleteDoc(doc.ref);
+          }
+        }
+      });
+    });
+
     return () => {
       unsubscribe();
       unsubscribeUsers();
+      unsubscribeReactions();
     };
   }, [roomId, userName, navigate]);
 
@@ -111,12 +154,30 @@ export default function PokerTable({ userName }) {
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const handleReaction = async (emoji) => {
+  // Manejar clic en carta de usuario para mostrar menú de reacciones
+  const handleUserCardClick = (userId, userName, event) => {
+    // Obtener posición del clic
+    const rect = event?.target?.getBoundingClientRect();
+    if (rect) {
+      setMenuPosition({
+        x: rect.left + rect.width / 2,
+        y: rect.top + rect.height / 2,
+      });
+    }
+    
+    setTargetUser({ id: userId, name: userName });
+    setShowReactionMenu(true);
+  };
+
+  // Enviar reacción dirigida a un usuario específico
+  const handleSendReaction = async (emoji, targetUser) => {
     const reactionsRef = collection(db, 'rooms', roomId, 'reactions');
     await addDoc(reactionsRef, {
       emoji,
-      userId: auth.currentUser?.uid || `user_${Date.now()}`,
-      userName,
+      fromUserId: auth.currentUser?.uid || `user_${Date.now()}`,
+      fromUserName: userName,
+      targetUserId: targetUser.id,
+      targetUserName: targetUser.name,
       timestamp: serverTimestamp(),
     });
   };
@@ -158,13 +219,21 @@ export default function PokerTable({ userName }) {
         {/* Mesa de usuarios */}
         <div className="card-base">
           <h2 className="text-xl font-semibold mb-4">Participantes</h2>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+            💡 Haz clic en la carta de un participante para enviarle una reacción
+          </p>
           <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
             {Object.values(users).map((user) => (
               <UserCard
                 key={user.id}
+                userId={user.id}
                 userName={user.name}
                 vote={user.vote}
                 isRevealed={isRevealed}
+                onReactionClick={(userId, userName) => 
+                  handleUserCardClick(userId, userName, event)
+                }
+                reactions={userReactions[user.id] || []}
               />
             ))}
           </div>
@@ -212,13 +281,19 @@ export default function PokerTable({ userName }) {
             )}
           </div>
         </div>
-
-        {/* Reacciones */}
-        <div className="card-base">
-          <h2 className="text-xl font-semibold mb-4 text-center">Reacciones</h2>
-          <EmojiReaction onReaction={handleReaction} />
-        </div>
       </div>
+
+      {/* Menú de reacciones */}
+      <AnimatePresence>
+        {showReactionMenu && (
+          <EmojiReactionMenu
+            targetUser={targetUser}
+            onClose={() => setShowReactionMenu(false)}
+            onSelectEmoji={handleSendReaction}
+            position={menuPosition}
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 }

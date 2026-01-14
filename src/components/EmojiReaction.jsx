@@ -1,77 +1,62 @@
 import { motion, AnimatePresence } from 'framer-motion';
-import { useState } from 'react';
+import { X } from 'lucide-react';
 
-const EMOJIS = ['🎉', '👍', '🔥', '🤔'];
+const EMOJIS = ['🎉', '👍', '🔥', '🤔', '💪', '⭐', '❤️', '😂', '🎯', '📄'];
 
-export default function EmojiReaction({ onReaction }) {
-  const [floatingEmojis, setFloatingEmojis] = useState([]);
-
-  const handleEmojiClick = (emoji) => {
-    // Crear emoji flotante con ID único
-    const id = Date.now() + Math.random();
-    const newEmoji = {
-      id,
-      emoji,
-      x: Math.random() * 100, // Posición X aleatoria (0-100%)
-    };
-
-    setFloatingEmojis(prev => [...prev, newEmoji]);
-
-    // Notificar a otros usuarios (Firebase)
-    if (onReaction) {
-      onReaction(emoji);
-    }
-
-    // Remover después de la animación
-    setTimeout(() => {
-      setFloatingEmojis(prev => prev.filter(e => e.id !== id));
-    }, 2000);
-  };
+export default function EmojiReactionMenu({ targetUser, onClose, onSelectEmoji, position }) {
+  if (!targetUser) return null;
 
   return (
     <>
-      {/* Botones de emojis */}
-      <div className="flex gap-2 justify-center">
-        {EMOJIS.map((emoji) => (
+      {/* Overlay para cerrar al hacer clic fuera */}
+      <div 
+        className="fixed inset-0 z-40"
+        onClick={onClose}
+      />
+      
+      {/* Menú de emojis */}
+      <motion.div
+        initial={{ scale: 0, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        exit={{ scale: 0, opacity: 0 }}
+        transition={{ duration: 0.2 }}
+        className="fixed z-50 bg-white dark:bg-gray-800 rounded-xl shadow-2xl p-4 border-2 border-primary dark:border-primary-dark"
+        style={{
+          left: position?.x || '50%',
+          top: position?.y || '50%',
+          transform: 'translate(-50%, -50%)',
+        }}
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between mb-3 pb-2 border-b border-gray-200 dark:border-gray-700">
+          <div className="text-sm font-semibold text-gray-700 dark:text-gray-300">
+            Reaccionar a: <span className="text-primary dark:text-primary-dark">{targetUser.name}</span>
+          </div>
           <button
-            key={emoji}
-            onClick={() => handleEmojiClick(emoji)}
-            className="text-3xl p-2 rounded-lg bg-white dark:bg-gray-800 shadow-md hover:shadow-xl hover:scale-110 active:scale-95 transition-all duration-200"
-            aria-label={`Reaccionar con ${emoji}`}
+            onClick={onClose}
+            className="p-1 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
           >
-            {emoji}
+            <X className="w-4 h-4" />
           </button>
-        ))}
-      </div>
+        </div>
 
-      {/* Emojis flotantes */}
-      <div className="fixed inset-0 pointer-events-none z-40">
-        <AnimatePresence>
-          {floatingEmojis.map((item) => (
-            <motion.div
-              key={item.id}
-              initial={{ y: 0, opacity: 1, scale: 1 }}
-              animate={{ y: -100, opacity: 0, scale: 1.5 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 2, ease: 'easeOut' }}
-              className="absolute bottom-20 text-5xl"
-              style={{ left: `${item.x}%` }}
+        {/* Grid de emojis */}
+        <div className="grid grid-cols-5 gap-2">
+          {EMOJIS.map((emoji) => (
+            <button
+              key={emoji}
+              onClick={() => {
+                onSelectEmoji(emoji, targetUser);
+                onClose();
+              }}
+              className="text-3xl p-3 rounded-lg bg-gray-50 dark:bg-gray-700 hover:bg-primary-light dark:hover:bg-primary-dark/20 hover:scale-110 active:scale-95 transition-all duration-200"
+              aria-label={`Enviar ${emoji}`}
             >
-              {item.emoji}
-            </motion.div>
+              {emoji}
+            </button>
           ))}
-        </AnimatePresence>
-      </div>
+        </div>
+      </motion.div>
     </>
   );
-}
-
-// Hook para recibir reacciones de otros usuarios
-export function useEmojiReactions(roomId, db) {
-  const [reactions, setReactions] = useState([]);
-
-  // Este hook se conectaría a Firebase para escuchar reacciones
-  // Por ahora es un placeholder para la estructura
-  
-  return reactions;
 }
