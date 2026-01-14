@@ -105,7 +105,7 @@ export default function PokerTable({ userName }) {
   };
 
   const handleCopyLink = () => {
-    const link = `${window.location.origin}/planning-poker/room/${roomId}`;
+    const link = `https://ericcgame.github.io/planning-poker/room/${roomId}`;
     navigator.clipboard.writeText(link);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
